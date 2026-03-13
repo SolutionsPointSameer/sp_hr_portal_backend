@@ -56,7 +56,9 @@ async function createPayrollRun({ month, year }, processedById) {
     where: { month_year: { month, year } },
   });
   if (existing) {
-    throw { status: 409, message: `Payroll run for ${month}/${year} already exists` };
+    const err = new Error(`Payroll run for ${month}/${year} already exists`);
+    err.status = 409;
+    throw err;
   }
 
   // Cutoff: last day of the payroll month
@@ -131,14 +133,34 @@ async function getPayrollRun(id) {
       },
     },
   });
-  if (!run) throw { status: 404, message: "Payroll run not found" };
+  if (!run) {
+    const err = new Error("Payroll run not found");
+    err.status = 404;
+    throw err;
+  }
   return run;
 }
 
 async function finalizePayrollRun(id) {
-  const run = await prisma.payrollRun.findUnique({ where: { id } });
-  if (!run) throw { status: 404, message: "Payroll run not found" };
-  if (run.status === "FINALIZED") throw { status: 400, message: "Already finalized" };
+  const run = await prisma.payrollRun.findUnique({
+    where: { id },
+    include: { _count: { select: { payslips: true } } }
+  });
+  if (!run) {
+    const err = new Error("Payroll run not found");
+    err.status = 404;
+    throw err;
+  }
+  if (run.status === "FINALIZED") {
+    const err = new Error("Already finalized");
+    err.status = 400;
+    throw err;
+  }
+  if (run._count.payslips === 0) {
+    const err = new Error("Cannot finalize an empty payroll run");
+    err.status = 400;
+    throw err;
+  }
   return prisma.payrollRun.update({ where: { id }, data: { status: "FINALIZED" } });
 }
 
