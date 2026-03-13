@@ -39,10 +39,10 @@ export default function PayrollRunDetail() {
 
     const handleCsvExport = () => {
         const rows = (run?.payslips ?? []).map((p: any) => ({
-            'Employee Code': p.employee.employeeCode,
-            'Name': `${p.employee.firstName} ${p.employee.lastName}`,
-            'Department': p.employee.department?.name ?? '-',
-            'Designation': p.employee.designation?.name ?? '-',
+            'Employee Code': p.employee?.employeeCode ?? '-',
+            'Name': `${p.employee?.firstName ?? ''} ${p.employee?.lastName ?? ''}`.trim(),
+            'Department': p.employee?.department?.name ?? '-',
+            'Designation': p.employee?.designation?.name ?? '-',
             'Gross': Number(p.gross),
             'Deductions': Number(p.deductions),
             'Net Pay': Number(p.netPay),
@@ -52,9 +52,9 @@ export default function PayrollRunDetail() {
 
     const handlePdfExport = async () => {
         const rows = (run?.payslips ?? []).map((p: any) => [
-            p.employee.employeeCode,
-            `${p.employee.firstName} ${p.employee.lastName}`,
-            p.employee.department?.name ?? '-',
+            p.employee?.employeeCode ?? '-',
+            `${p.employee?.firstName ?? ''} ${p.employee?.lastName ?? ''}`.trim(),
+            p.employee?.department?.name ?? '-',
             Number(p.gross),
             Number(p.deductions),
             Number(p.netPay),
@@ -72,15 +72,15 @@ export default function PayrollRunDetail() {
             key: 'employee',
             render: (_: any, r: any) => (
                 <div>
-                    <div className="font-medium">{r.employee.firstName} {r.employee.lastName}</div>
-                    <div className="text-xs text-slate-400 font-mono">{r.employee.employeeCode}</div>
+                    <div className="font-medium">{r.employee?.firstName} {r.employee?.lastName}</div>
+                    <div className="text-xs text-slate-400 font-mono">{r.employee?.employeeCode ?? '-'}</div>
                 </div>
             ),
         },
         {
             title: 'Department',
             key: 'dept',
-            render: (_: any, r: any) => r.employee.department?.name ?? '-',
+            render: (_: any, r: any) => r.employee?.department?.name ?? '-',
         },
         {
             title: 'Gross',
