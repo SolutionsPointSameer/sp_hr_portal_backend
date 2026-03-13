@@ -37,7 +37,7 @@ const {
   getMyPayslips,
 } = require("../modules/payroll/payroll.service");
 
-beforeEach(() => {
+afterEach(() => {
   jest.clearAllMocks();
 });
 
