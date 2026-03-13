@@ -294,20 +294,13 @@ function EmployeeSalaryStructures({ employeeId }: { employeeId: string }) {
 
     const saveMutation = useMutation({
         mutationFn: async (values: any) => {
+            const { conveyance, medical, special, pf, esi, tds, effectiveDate, ...rest } = values;
             const payload = {
-                ...values,
+                ...rest,
                 employeeId,
-                effectiveDate: values.effectiveDate?.format('YYYY-MM-DD'),
-                allowances: {
-                    conveyance: values.conveyance ?? 0,
-                    medical: values.medical ?? 0,
-                    special: values.special ?? 0,
-                },
-                deductions: {
-                    pf: values.pf ?? 0,
-                    esi: values.esi ?? 0,
-                    tds: values.tds ?? 0,
-                },
+                effectiveDate: effectiveDate?.format('YYYY-MM-DD'),
+                allowances: { conveyance: conveyance ?? 0, medical: medical ?? 0, special: special ?? 0 },
+                deductions: { pf: pf ?? 0, esi: esi ?? 0, tds: tds ?? 0 },
             };
             if (editingId) {
                 return apiClient.patch(`/payroll/salary-structures/${editingId}`, payload);
@@ -471,6 +464,8 @@ function EmployeeSalaryStructures({ employeeId }: { employeeId: string }) {
     );
 }
 
+const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 function MyPayslips() {
     const { data: payslips = [], isLoading } = useQuery({
         queryKey: ['my-payslips'],
@@ -483,13 +478,11 @@ function MyPayslips() {
     const formatINR = (v: number) =>
         new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v || 0);
 
-    const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
     const columns = [
         {
             title: 'Period',
             key: 'period',
-            render: (_: any, r: any) => `${MONTHS[r.payrollRun.month]} ${r.payrollRun.year}`,
+            render: (_: any, r: any) => `${MONTHS[r.payrollRun?.month ?? 0]} ${r.payrollRun?.year ?? ''}`,
         },
         {
             title: 'Gross',
