@@ -82,11 +82,17 @@ async function applyLeave({
     throw { status: 400, message: "No manager assigned for approval" };
 
 
+  const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: leaveTypeId } });
+  if (!leaveTypeObj) throw { status: 400, message: "Invalid leave type" };
+
   const balance = await prisma.leaveBalance.findUnique({
     where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year } },
   });
-  if (!balance || balance.remaining < daysCount)
-    throw { status: 400, message: "Insufficient leave balance" };
+
+  if (leaveTypeObj.isPaid) {
+    if (!balance || balance.remaining < daysCount)
+      throw { status: 400, message: "Insufficient leave balance" };
+  }
 
   const leave = await prisma.leaveRequest.create({
     data: {
