@@ -106,6 +106,29 @@ async function applyLeave({
     },
   });
 
+  // Fetch admin emails
+  const admins = await prisma.employee.findMany({
+    where: { role: { in: ['HR_ADMIN', 'SUPER_ADMIN'] }, status: 'ACTIVE' },
+    select: { email: true, firstName: true }
+  });
+
+  const datesStr = `${from.toISOString().split("T")[0]} to ${to.toISOString().split("T")[0]}`;
+  const empName = `${emp.firstName} ${emp.lastName}`;
+
+  // Notify manager
+  if (emp.manager && emp.manager.email) {
+    const { text, html } = emailTemplates.leaveApplied(emp.manager.firstName, empName, leaveTypeObj.name, datesStr);
+    sendEmail({ to: emp.manager.email, subject: `Leave Application: ${empName}`, body: text, html }).catch(console.error);
+  }
+
+  // Notify admins
+  for (const admin of admins) {
+    if (admin.email && (!emp.manager || admin.email !== emp.manager.email)) {
+      const { text, html } = emailTemplates.leaveApplied(admin.firstName, empName, leaveTypeObj.name, datesStr);
+      sendEmail({ to: admin.email, subject: `Leave Application: ${empName}`, body: text, html }).catch(console.error);
+    }
+  }
+
   return leave;
 }
 

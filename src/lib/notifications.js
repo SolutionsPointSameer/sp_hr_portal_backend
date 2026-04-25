@@ -44,6 +44,14 @@ const emailTemplates = {
   leaveDecision: (name, status, dates) =>
     `Hi ${name},\n\nYour leave request for ${dates} has been ${status.toLowerCase()}.\n\nHR Portal`,
 
+  leaveApplied: (approverName, employeeName, leaveTypeName, dates) => ({
+    text: `Hi ${approverName},\n\n${employeeName} has applied for ${leaveTypeName} for the dates ${dates}.\n\nPlease review and approve/reject via the HR Portal.\n\nRegards,\nSP HR Portal`,
+    html: `<p>Hi <strong>${approverName}</strong>,</p>
+           <p><strong>${employeeName}</strong> has applied for <strong>${leaveTypeName}</strong> for the dates <strong>${dates}</strong>.</p>
+           <p>Please review and approve/reject via the HR Portal.</p>
+           <p>Regards,<br/>SP HR Portal</p>`
+  }),
+
   payslipPublished: (name, month, year) =>
     `Hi ${name},\n\nYour payslip for ${month}/${year} is ready in the HR portal.\n\nHR Portal`,
 
