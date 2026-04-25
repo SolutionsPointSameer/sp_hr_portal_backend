@@ -57,6 +57,10 @@ async function applyLeave({
     if (d.getDay() !== 0 && d.getDay() !== 6) daysCount++;
   }
 
+  if (daysCount === 0) {
+    throw { status: 400, message: "Selected dates fall on non-working days. Leave duration cannot be 0 days." };
+  }
+
   const emp = await prisma.employee.findUnique({
     where: { id: employeeId },
     include: { manager: true },
