@@ -34,8 +34,8 @@ async function getSolutionsPointCompanyId() {
 }
 
 async function listEmployees(query) {
-  const page = parseInt(query.page) || 1;
-  const limit = Math.min(parseInt(query.limit) || 20, 100);
+  const page = Math.max(1, parseInt(query.page) || 1);
+  const limit = Math.max(1, Math.min(parseInt(query.limit) || 20, 100));
   const skip = (page - 1) * limit;
 
   const where = {};

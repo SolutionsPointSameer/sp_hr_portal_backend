@@ -64,21 +64,33 @@ async function createPayrollRun({ month, year }, processedById) {
   // Cutoff: last day of the payroll month
   const cutoffDate = new Date(year, month, 0);
 
+  // Fetch all active employees and all applicable salary structures in two queries (not N+1)
   const employees = await prisma.employee.findMany({
     where: { status: "ACTIVE" },
     select: { id: true },
   });
+
+  const allStructures = await prisma.salaryStructure.findMany({
+    where: { effectiveDate: { lte: cutoffDate } },
+    orderBy: { effectiveDate: "desc" },
+  });
+
+  // Group: pick the latest structure per employee
+  const latestByEmployee = new Map();
+  for (const struct of allStructures) {
+    if (!latestByEmployee.has(struct.employeeId)) {
+      latestByEmployee.set(struct.employeeId, struct);
+    }
+  }
 
   const run = await prisma.$transaction(async (tx) => {
     const newRun = await tx.payrollRun.create({
       data: { month, year, processedById, status: "DRAFT" },
     });
 
+    const payslipData = [];
     for (const emp of employees) {
-      const struct = await tx.salaryStructure.findFirst({
-        where: { employeeId: emp.id, effectiveDate: { lte: cutoffDate } },
-        orderBy: { effectiveDate: "desc" },
-      });
+      const struct = latestByEmployee.get(emp.id);
       if (!struct) continue;
 
       const allowances = struct.allowances ?? {};
@@ -92,15 +104,17 @@ async function createPayrollRun({ month, year }, processedById) {
       );
       const netPay = gross - totalDeductions;
 
-      await tx.payslip.create({
-        data: {
-          payrollRunId: newRun.id,
-          employeeId: emp.id,
-          gross,
-          deductions: totalDeductions,
-          netPay,
-        },
+      payslipData.push({
+        payrollRunId: newRun.id,
+        employeeId: emp.id,
+        gross,
+        deductions: totalDeductions,
+        netPay,
       });
+    }
+
+    if (payslipData.length > 0) {
+      await tx.payslip.createMany({ data: payslipData });
     }
 
     return newRun;

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { prisma } = require("../../lib/prisma");
 const bcrypt = require("bcryptjs");
 const { sendEmail } = require("../../lib/notifications");
@@ -45,7 +46,7 @@ async function resetPassword(id) {
   const employee = await prisma.employee.findUnique({ where: { id } });
   if (!employee) throw { status: 404, message: "User not found" };
 
-  const tempPassword = Math.random().toString(36).slice(-8);
+  const tempPassword = crypto.randomBytes(8).toString('hex');
   const passwordHash = await bcrypt.hash(tempPassword, 10);
 
   await prisma.employee.update({

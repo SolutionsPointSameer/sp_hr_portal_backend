@@ -212,25 +212,42 @@ async function decideLeave(id, body, actorId, actorRole) {
 
   if (action === "APPROVED") {
     const year = leave.fromDate.getFullYear();
-    await prisma.$transaction([
-      prisma.leaveBalance.update({
-        where: {
-          employeeId_leaveTypeId_year: {
-            employeeId: leave.employeeId,
-            leaveTypeId: leave.leaveTypeId,
-            year,
+    const leaveTypeObj = await prisma.leaveType.findUnique({ where: { id: leave.leaveTypeId } });
+
+    if (leaveTypeObj && leaveTypeObj.isPaid) {
+      // Transactionally re-check balance to prevent overdraw under concurrency
+      await prisma.$transaction(async (tx) => {
+        const balance = await tx.leaveBalance.findUnique({
+          where: {
+            employeeId_leaveTypeId_year: {
+              employeeId: leave.employeeId,
+              leaveTypeId: leave.leaveTypeId,
+              year,
+            },
           },
-        },
-        data: {
-          used: { increment: leave.daysCount },
-          remaining: { decrement: leave.daysCount },
-        },
-      }),
-      prisma.leaveRequest.update({
+        });
+        if (!balance || balance.remaining < leave.daysCount) {
+          throw { status: 400, message: "Insufficient leave balance — another approval may have consumed it" };
+        }
+        await tx.leaveBalance.update({
+          where: { id: balance.id },
+          data: {
+            used: { increment: leave.daysCount },
+            remaining: { decrement: leave.daysCount },
+          },
+        });
+        await tx.leaveRequest.update({
+          where: { id },
+          data: { status: "APPROVED", decidedAt: new Date() },
+        });
+      });
+    } else {
+      // Unpaid leave — approve without touching leave balance
+      await prisma.leaveRequest.update({
         where: { id },
         data: { status: "APPROVED", decidedAt: new Date() },
-      }),
-    ]);
+      });
+    }
   } else {
     await prisma.leaveRequest.update({
       where: { id },

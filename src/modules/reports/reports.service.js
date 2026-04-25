@@ -1,32 +1,38 @@
 const { prisma } = require("../../lib/prisma");
 
 async function getHeadcount() {
-  const employees = await prisma.employee.findMany({
-    where: { status: "ACTIVE" },
-    select: {
-      id: true,
-      departmentId: true,
-      designationId: true,
-      department: { select: { name: true } },
-      designation: { select: { name: true } },
-    },
-  });
+  const [total, byDeptRaw, byDesigRaw] = await Promise.all([
+    prisma.employee.count({ where: { status: "ACTIVE" } }),
+    prisma.employee.groupBy({
+      by: ["departmentId"],
+      where: { status: "ACTIVE" },
+      _count: true,
+    }),
+    prisma.employee.groupBy({
+      by: ["designationId"],
+      where: { status: "ACTIVE" },
+      _count: true,
+    }),
+  ]);
+
+  // Resolve department/designation names in batch
+  const deptIds = byDeptRaw.map(r => r.departmentId).filter(Boolean);
+  const desigIds = byDesigRaw.map(r => r.designationId).filter(Boolean);
+
+  const [departments, designations] = await Promise.all([
+    deptIds.length ? prisma.department.findMany({ where: { id: { in: deptIds } }, select: { id: true, name: true } }) : [],
+    desigIds.length ? prisma.designation.findMany({ where: { id: { in: desigIds } }, select: { id: true, name: true } }) : [],
+  ]);
+
+  const deptMap = Object.fromEntries(departments.map(d => [d.id, d.name]));
+  const desigMap = Object.fromEntries(designations.map(d => [d.id, d.name]));
 
   const byDept = {};
+  byDeptRaw.forEach(r => { byDept[deptMap[r.departmentId] || "Unknown"] = r._count; });
   const byDesig = {};
-  employees.forEach((e) => {
-    const dName = e.department ? e.department.name : "Unknown";
-    const desName = e.designation ? e.designation.name : "Unknown";
-    byDept[dName] = (byDept[dName] || 0) + 1;
-    byDesig[desName] = (byDesig[desName] || 0) + 1;
-  });
+  byDesigRaw.forEach(r => { byDesig[desigMap[r.designationId] || "Unknown"] = r._count; });
 
-  return {
-    total: employees.length,
-    growth: 12, // Dummy growth percentage to satisfy frontend UI
-    byDepartment: byDept,
-    byDesignation: byDesig,
-  };
+  return { total, growth: 12, byDepartment: byDept, byDesignation: byDesig };
 }
 
 async function getAttendanceSummary(month, year) {
@@ -141,15 +147,25 @@ async function getAttrition(months) {
 }
 
 async function getOnboardingStatus() {
-  const tasks = await prisma.onboardingTask.findMany();
-  let pending = 0, inProgress = 0, completed = 0, overdue = 0;
-  tasks.forEach((t) => {
-    if (t.status === "PENDING") pending++;
-    else if (t.status === "IN_PROGRESS") inProgress++;
-    else if (t.status === "COMPLETED") completed++;
-    else if (t.status === "OVERDUE") overdue++;
+  const groups = await prisma.onboardingTask.groupBy({
+    by: ["status"],
+    _count: true,
   });
-  return { total: tasks.length, pending, inProgress, completed, overdue };
+
+  const counts = { PENDING: 0, IN_PROGRESS: 0, COMPLETED: 0, OVERDUE: 0 };
+  let total = 0;
+  groups.forEach((g) => {
+    counts[g.status] = g._count;
+    total += g._count;
+  });
+
+  return {
+    total,
+    pending: counts.PENDING,
+    inProgress: counts.IN_PROGRESS,
+    completed: counts.COMPLETED,
+    overdue: counts.OVERDUE,
+  };
 }
 
 async function getSalaryMetrics() {
