@@ -52,13 +52,26 @@ async function applyLeave({
 }) {
   const from = new Date(fromDate);
   const to = new Date(toDate);
+  const year = from.getFullYear();
+  await ensureLeaveBalances(employeeId, year);
+
+  // Fetch all official holidays for the year
+  const holidaysList = await prisma.holiday.findMany({
+    where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59.999Z`) } }
+  });
+  const holidayDateStrings = new Set(holidaysList.map(h => h.date.toISOString().split("T")[0]));
+
   let daysCount = 0;
   for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
-    if (d.getDay() !== 0 && d.getDay() !== 6) daysCount++;
+    const isSunday = d.getDay() === 0;
+    const isHoliday = holidayDateStrings.has(d.toISOString().split("T")[0]);
+    if (!isSunday && !isHoliday) {
+      daysCount++;
+    }
   }
 
   if (daysCount === 0) {
-    throw { status: 400, message: "Selected dates fall on non-working days. Leave duration cannot be 0 days." };
+    throw { status: 400, message: "Selected dates fall on non-working days or holidays. Leave duration cannot be 0 days." };
   }
 
   const emp = await prisma.employee.findUnique({
@@ -68,8 +81,7 @@ async function applyLeave({
   if (!emp.managerId)
     throw { status: 400, message: "No manager assigned for approval" };
 
-  const year = from.getFullYear();
-  await ensureLeaveBalances(employeeId, year);
+
   const balance = await prisma.leaveBalance.findUnique({
     where: { employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year } },
   });
