@@ -11,7 +11,9 @@ async function main() {
     data: { name: "Software Engineer", level: 2, departmentId: dept.id },
   });
 
-  const passwordHash = await bcrypt.hash("Admin@123", 10);
+  const crypto = require("crypto");
+  const tempPassword = crypto.randomBytes(8).toString("hex");
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
   await prisma.employee.create({
     data: {
       employeeCode: "EMP001",
@@ -25,7 +27,7 @@ async function main() {
       designationId: desig.id,
     },
   });
-  console.log("Seed complete. Login: admin@company.com / Admin@123");
+  console.log(`Seed complete. Login: admin@company.com / ${tempPassword}`);
 }
 
 main()

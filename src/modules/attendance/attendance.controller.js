@@ -1,4 +1,5 @@
 const service = require("./attendance.service");
+const { prisma } = require("../../lib/prisma");
 async function checkIn(req, res, next) {
   try {
     const { latitude, longitude } = req.body || {};
@@ -28,6 +29,17 @@ async function getEmployeeRecords(req, res, next) {
   const month = parseInt(req.query.month) || new Date().getMonth() + 1;
   const year = parseInt(req.query.year) || new Date().getFullYear();
   try {
+    const actor = req.user;
+    // Managers can only view records for employees who report to them
+    if (actor.role === 'MANAGER') {
+      const target = await prisma.employee.findUnique({
+        where: { id: req.params.id },
+        select: { managerId: true }
+      });
+      if (!target || target.managerId !== actor.id) {
+        return res.status(403).json({ error: 'Access denied: employee is not in your team' });
+      }
+    }
     res.json(await service.getEmployeeRecords(req.params.id, month, year));
   } catch (err) {
     next(err);

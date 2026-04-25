@@ -21,6 +21,7 @@ async function updateTaskStatus(req, res, next) {
         req.params.id,
         req.body.status,
         req.user.id,
+        req.user.role,
       ),
     );
   } catch (err) {
@@ -29,7 +30,7 @@ async function updateTaskStatus(req, res, next) {
 }
 async function getEmployeeTasks(req, res, next) {
   try {
-    res.json(await service.getEmployeeTasks(req.params.id));
+    res.json(await service.getEmployeeTasks(req.params.id, req.user.id, req.user.role));
   } catch (err) {
     next(err);
   }

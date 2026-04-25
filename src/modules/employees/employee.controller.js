@@ -84,6 +84,11 @@ async function remove(req, res, next) {
 
 async function completeOnboarding(req, res, next) {
   try {
+    const isSelf = req.user.id === req.params.id;
+    const isAdminOrHr = ['HR_ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    if (!isSelf && !isAdminOrHr) {
+      return res.status(403).json({ error: 'Forbidden: You can only complete your own onboarding' });
+    }
     const result = await service.completeOnboarding(req.params.id);
     res.json(result);
   } catch (err) {

@@ -39,11 +39,30 @@ async function createTask(data, actorId) {
   return task;
 }
 
-async function updateTaskStatus(id, status, actorId) {
+async function updateTaskStatus(id, status, actorId, actorRole) {
+  // Only the assigned user, or HR/Admin, can update
+  const task = await prisma.onboardingTask.findUnique({ where: { id } });
+  if (!task) throw { status: 404, message: 'Task not found' };
+
+  const isAdminOrHr = ['HR_ADMIN', 'SUPER_ADMIN'].includes(actorRole);
+  if (!isAdminOrHr && task.assignedToId !== actorId) {
+    throw { status: 403, message: 'You do not have permission to update this task' };
+  }
+
   return prisma.onboardingTask.update({ where: { id }, data: { status } });
 }
 
-async function getEmployeeTasks(employeeId) {
+async function getEmployeeTasks(employeeId, actorId, actorRole) {
+  // Managers can only view tasks for employees who report to them
+  if (actorRole === 'MANAGER') {
+    const target = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { managerId: true }
+    });
+    if (!target || target.managerId !== actorId) {
+      throw { status: 403, message: 'Access denied: employee is not in your team' };
+    }
+  }
   return prisma.onboardingTask.findMany({ where: { employeeId } });
 }
 

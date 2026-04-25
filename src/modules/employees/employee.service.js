@@ -121,7 +121,7 @@ async function getEmployeeById(id) {
 }
 
 async function createEmployee(data, actorId) {
-  const { password, ctc, inHandSalary, ...rest } = data;
+  const { password, ctc, inHandSalary, role, ...rest } = data;
 
   // Protect salary fields
   let actorRole = "EMPLOYEE"; // Default if no actorId
@@ -134,21 +134,39 @@ async function createEmployee(data, actorId) {
   const finalCtc = isAdmin ? (ctc !== undefined ? ctc : null) : null;
   const finalInHandSalary = isAdmin ? (inHandSalary !== undefined ? inHandSalary : null) : null;
 
-  if (!rest.employeeCategory) {
-    rest.employeeCategory = "DIRECT";
+  let finalRole = "EMPLOYEE";
+  if (role && isAdmin) {
+    if (role === "SUPER_ADMIN" && actorRole !== "SUPER_ADMIN") {
+      throw { status: 403, message: "Only SUPER_ADMIN can create a SUPER_ADMIN" };
+    }
+    finalRole = role;
   }
 
-  if (rest.employeeCategory === "DIRECT") {
-    rest.companyId = await getSolutionsPointCompanyId();
-  } else if (!rest.companyId) {
+  const safeFields = {};
+  const allowedFields = [
+    "firstName", "lastName", "email", "phone", "employeeCode",
+    "employeeCategory", "employmentType", "status", "dateOfJoining",
+    "departmentId", "designationId", "locationId", "companyId", "managerId"
+  ];
+  for (const field of allowedFields) {
+    if (rest[field] !== undefined) safeFields[field] = rest[field];
+  }
+
+  if (!safeFields.employeeCategory) {
+    safeFields.employeeCategory = "DIRECT";
+  }
+
+  if (safeFields.employeeCategory === "DIRECT") {
+    safeFields.companyId = await getSolutionsPointCompanyId();
+  } else if (!safeFields.companyId) {
     throw { status: 400, message: "Client company is required for deployed manpower employees" };
   }
 
   // Auto-generate employeeCode if not provided
-  let generatedCode = rest.employeeCode;
+  let generatedCode = safeFields.employeeCode;
   if (!generatedCode) {
-    const firstInitial = (rest.firstName ? rest.firstName.charAt(0) : "X").toUpperCase();
-    const lastInitial = (rest.lastName ? rest.lastName.charAt(0) : "X").toUpperCase();
+    const firstInitial = (safeFields.firstName ? safeFields.firstName.charAt(0) : "X").toUpperCase();
+    const lastInitial = (safeFields.lastName ? safeFields.lastName.charAt(0) : "X").toUpperCase();
     const prefix = `SP${firstInitial}${lastInitial}`;
     
     // Find the latest employee code with this prefix to get the next sequence
@@ -166,43 +184,44 @@ async function createEmployee(data, actorId) {
       }
     }
     generatedCode = `${prefix}${seq.toString().padStart(4, "0")}`;
-    rest.employeeCode = generatedCode;
+    safeFields.employeeCode = generatedCode;
   }
 
   const existing = await prisma.employee.findFirst({
     where: {
       OR: [
-        { employeeCode: rest.employeeCode },
-        { email: rest.email }
+        { employeeCode: safeFields.employeeCode },
+        { email: safeFields.email }
       ]
     }
   });
 
   if (existing) {
-    if (existing.employeeCode === rest.employeeCode) {
+    if (existing.employeeCode === safeFields.employeeCode) {
       throw { status: 400, message: "Employee code already exists" };
     }
     throw { status: 400, message: "Email already exists" };
   }
 
-  const passwordHash = await bcrypt.hash(password || "Changeme@123", 10);
+  const tempPwd = password || crypto.randomBytes(8).toString("hex");
+  const passwordHash = await bcrypt.hash(tempPwd, 10);
 
   const emp = await prisma.employee.create({
     data: {
-      ...rest,
+      ...safeFields,
+      role: finalRole,
       ctc: finalCtc,
       inHandSalary: finalInHandSalary,
       passwordHash,
-      dateOfJoining: new Date(rest.dateOfJoining),
+      dateOfJoining: new Date(safeFields.dateOfJoining),
       requiresOnboarding: true,
     },
   });
 
-  await createAuditLog(actorId, "CREATE", "Employee", emp.id, { new: rest });
+  await createAuditLog(actorId, "CREATE", "Employee", emp.id, { new: safeFields });
   delete emp.passwordHash;
 
   // Send welcome email with temp password — fire and forget (don't block response)
-  const tempPwd = password || "Changeme@123";
   const { text, html } = emailTemplates.welcomeEmployee({
     firstName: emp.firstName,
     lastName: emp.lastName,
@@ -226,7 +245,7 @@ async function updateEmployee(id, data, actorId) {
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) throw { status: 404, message: "Employee not found" };
 
-  const { ctc, inHandSalary, ...updateData } = data;
+  const { ctc, inHandSalary, role, ...updateData } = data;
   
   // Protect salary fields
   let actorRole = "EMPLOYEE";
@@ -236,35 +255,44 @@ async function updateEmployee(id, data, actorId) {
   }
   const isAdmin = actorRole === "HR_ADMIN" || actorRole === "SUPER_ADMIN";
 
-  const nextEmployeeCategory = updateData.employeeCategory || existing.employeeCategory;
-  const nextCompanyId =
-    updateData.companyId !== undefined ? updateData.companyId : existing.companyId;
+  const safeFields = {};
+  const allowedFields = [
+    "firstName", "lastName", "email", "phone", "employeeCode",
+    "employeeCategory", "employmentType", "status", "dateOfJoining", "dateOfLeaving",
+    "departmentId", "designationId", "locationId", "companyId", "managerId",
+    "requiresOnboarding"
+  ];
+  for (const field of allowedFields) {
+    if (updateData[field] !== undefined) safeFields[field] = updateData[field];
+  }
+
+  // Admin and role checks
+  if (role && isAdmin) {
+    if (role === "SUPER_ADMIN" && actorRole !== "SUPER_ADMIN") {
+      throw { status: 403, message: "Only SUPER_ADMIN can change a role to SUPER_ADMIN" };
+    }
+    safeFields.role = role;
+  }
+
+  const nextEmployeeCategory = safeFields.employeeCategory || existing.employeeCategory;
+  const nextCompanyId = safeFields.companyId !== undefined ? safeFields.companyId : existing.companyId;
 
   if (nextEmployeeCategory === "DIRECT") {
-    updateData.companyId = await getSolutionsPointCompanyId();
+    safeFields.companyId = await getSolutionsPointCompanyId();
   } else if (!nextCompanyId) {
     throw { status: 400, message: "Client company is required for deployed manpower employees" };
   }
 
-  if (ctc !== undefined) {
-    if (isAdmin) {
-      updateData.ctc = ctc;
-    } else {
-      // Ignore or reject changing CTC if not admin
-    }
+  if (ctc !== undefined && isAdmin) {
+    safeFields.ctc = ctc;
   }
-
-  if (inHandSalary !== undefined) {
-    if (isAdmin) {
-      updateData.inHandSalary = inHandSalary;
-    } else {
-      // Ignore or reject changing inHandSalary if not admin
-    }
+  if (inHandSalary !== undefined && isAdmin) {
+    safeFields.inHandSalary = inHandSalary;
   }
 
   const emp = await prisma.employee.update({
     where: { id },
-    data: updateData,
+    data: safeFields,
   });
 
   await createAuditLog(actorId, "UPDATE", "Employee", id, {

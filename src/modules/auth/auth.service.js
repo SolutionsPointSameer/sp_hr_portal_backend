@@ -31,9 +31,11 @@ async function loginUser(email, password) {
 
   const decodedRefresh = verifyRefreshToken(refreshToken);
 
+  const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
   await prisma.refreshToken.create({
     data: {
-      token: refreshToken,
+      token: hashedToken,
       employeeId: employee.id,
       expiresAt: new Date(decodedRefresh.exp * 1000),
     },
@@ -54,8 +56,9 @@ async function loginUser(email, password) {
 }
 
 async function refreshUserToken(token) {
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
   const existingToken = await prisma.refreshToken.findUnique({
-    where: { token },
+    where: { token: hashedToken },
   });
   if (!existingToken) {
     throw { status: 401, message: "Invalid refresh token" };
@@ -81,9 +84,11 @@ async function refreshUserToken(token) {
     const newRefreshToken = signRefreshToken({ sub: employee.id });
     const newDecodedRefresh = verifyRefreshToken(newRefreshToken);
 
+    const newHashedToken = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+
     await prisma.refreshToken.create({
       data: {
-        token: newRefreshToken,
+        token: newHashedToken,
         employeeId: employee.id,
         expiresAt: new Date(newDecodedRefresh.exp * 1000),
       },
@@ -100,7 +105,8 @@ async function refreshUserToken(token) {
 
 async function logoutUser(token) {
   if (token) {
-    await prisma.refreshToken.deleteMany({ where: { token } });
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    await prisma.refreshToken.deleteMany({ where: { token: hashedToken } });
   }
 }
 
@@ -122,7 +128,7 @@ async function triggerPasswordReset(email) {
   });
 
   // Generate 6-digit OTP
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const otp = String(crypto.randomInt(100000, 1000000));
   const otpHash = await bcrypt.hash(otp, 10);
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 

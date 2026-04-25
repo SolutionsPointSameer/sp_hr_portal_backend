@@ -51,15 +51,29 @@ function validate(schema) {
   };
 }
 
+const rateLimit = require("express-rate-limit");
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per windowMs
+  message: { error: "Too many requests from this IP, please try again after 15 minutes" }
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many OTP attempts from this IP, please try again later" }
+});
+
 // ── Public routes ─────────────────────────────────────────────────────────────
-router.post("/login", validate(loginSchema), login);
+router.post("/login", authLimiter, validate(loginSchema), login);
 router.post("/refresh", refresh);
 router.post("/logout", logout);
 
 // Forgot Password — 3-step OTP flow
-router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
-router.post("/verify-otp", validate(verifyOtpSchema), verifyOtp);
-router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+router.post("/forgot-password", otpLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post("/verify-otp", otpLimiter, validate(verifyOtpSchema), verifyOtp);
+router.post("/reset-password", otpLimiter, validate(resetPasswordSchema), resetPassword);
 
 // ── Authenticated routes ──────────────────────────────────────────────────────
 router.post("/change-password", authenticate, validate(changePasswordSchema), changePassword);

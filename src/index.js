@@ -13,7 +13,10 @@ function createCorsOptions() {
   const allowedOrigins = getAllowedOrigins();
 
   if (allowedOrigins.length === 0) {
-    return { origin: true };
+    if (process.env.NODE_ENV !== "production") {
+      return { origin: true };
+    }
+    return { origin: false };
   }
 
   return {
