@@ -2,6 +2,37 @@ const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const { loadSecretsToEnv } = require("./lib/keyVault");
 
+function getAllowedOrigins() {
+  return (process.env.FRONTEND_URL || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
+function createCorsOptions() {
+  const allowedOrigins = getAllowedOrigins();
+
+  if (allowedOrigins.length === 0) {
+    return { origin: true };
+  }
+
+  return {
+    origin(origin, callback) {
+      // Allow non-browser and same-origin requests.
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
+  };
+}
+
 async function loadAppSecrets() {
   if (process.env.KEYVAULT_SECRETS_LOADED === "1") {
     return [];
@@ -42,7 +73,7 @@ async function createApp() {
   const app = express();
 
   app.use(helmet({ crossOriginResourcePolicy: false }));
-  app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
+  app.use(cors(createCorsOptions()));
   app.use(morgan("dev"));
   app.use(express.json());
 
